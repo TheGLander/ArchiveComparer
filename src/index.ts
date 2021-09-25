@@ -1,8 +1,10 @@
 import { execSync } from "child_process"
-import { readdirSync, mkdtempSync, rmSync, statSync } from "fs"
+import { readdirSync, mkdtempSync, mkdirSync, rmSync, statSync } from "fs"
 import { sep, join } from "path"
 import { tmpdir } from "os"
 import archiveCommands from "./archiveCommands"
+
+const TEST_FILES = "testfiles"
 
 const tempDir = mkdtempSync(tmpdir() + sep)
 
@@ -28,34 +30,108 @@ function countFilesizeInDirectory(dir: string): number {
 	}, 0)
 }
 
+export interface CompressionResult {
+	archiver: string
+	test: string
+	timeSpent: number
+	compressionRate: number
+}
+
 function runCompressionTest(
-	testName: string,
+	archiver: string,
+	test: string,
 	command: string,
 	compressDir: string
-): [compressionRate: number, timeSpent: number] {
-	console.log(`Running compression test ${testName}...`)
+): CompressionResult {
 	const oldSize = countFilesizeInDirectory(compressDir),
-		newFile = `${tempDir}${sep}${testName}`
+		newFile = `${tempDir}${sep}${test}.${archiver}`
 	const timeSpent = timeFunction(() =>
 		execSync(formatCommand(command, compressDir, newFile))
 	)
-	return [oldSize / statSync(newFile).size, timeSpent]
+	return {
+		archiver,
+		test,
+		compressionRate: oldSize / statSync(newFile).size,
+		timeSpent,
+	}
+}
+
+export interface ExtractionResult {
+	archiver: string
+	test: string
+	timeSpent: number
 }
 
 function runExtractionTest(
-	testName: string,
+	archiver: string,
+	test: string,
 	command: string
-): [timeSpent: number] {
-	console.log(`Running extraction test ${testName}...`)
+): ExtractionResult {
 	const newDir = `${tempDir}${sep}${Date.now()}`
+	mkdirSync(newDir)
 	const timeSpent = timeFunction(() =>
-		execSync(formatCommand(command, `${tempDir}${sep}${testName}`, newDir))
+		execSync(
+			formatCommand(command, `${tempDir}${sep}${test}.${archiver}`, newDir)
+		)
 	)
 	rmSync(newDir, { recursive: true })
-	return [timeSpent]
+	return {
+		archiver,
+		test,
+		timeSpent,
+	}
 }
 
-console.log(
-	runCompressionTest("compress.zip", archiveCommands.zip.add, "testfiles/text")
-)
-console.log(runExtractionTest("compress.zip", archiveCommands.zip.extract))
+const compressionRecords: Record<string, CompressionResult[]> = {},
+	extractionRecords: Record<string, ExtractionResult[]> = {}
+
+for (const test of readdirSync(TEST_FILES)) {
+	compressionRecords[test] = []
+	extractionRecords[test] = []
+	for (const archiver in archiveCommands) {
+		console.log(`Running compression test ${test}.${archiver}...`)
+		const cstats = runCompressionTest(
+			archiver,
+			test,
+			archiveCommands[archiver].add,
+			join(process.cwd(), TEST_FILES, test)
+		)
+		compressionRecords[test].push(cstats)
+		console.log(`Running extraction test ${test}.${archiver}...`)
+		const xstats = runExtractionTest(
+			archiver,
+			test,
+			archiveCommands[archiver].extract
+		)
+		extractionRecords[test].push(xstats)
+	}
+}
+
+for (const test in compressionRecords) {
+	console.log(
+		`Speediest ${test} compression: ${
+			compressionRecords[test].reduce(
+				(acc, val) => (acc.timeSpent > val.timeSpent ? val : acc),
+				compressionRecords[test][0]
+			).archiver
+		}`
+	)
+	console.log(
+		`Best quality ${test} compression: ${
+			compressionRecords[test].reduce(
+				(acc, val) => (acc.compressionRate > val.compressionRate ? acc : val),
+				compressionRecords[test][0]
+			).archiver
+		}`
+	)
+	console.log(
+		`Speediest ${test} extraction: ${
+			extractionRecords[test].reduce(
+				(acc, val) => (acc.timeSpent > val.timeSpent ? val : acc),
+				compressionRecords[test][0]
+			).archiver
+		}`
+	)
+}
+
+rmSync(tempDir, { recursive: true })

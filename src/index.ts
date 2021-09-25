@@ -1,10 +1,11 @@
 import { execSync } from "child_process"
 import { readdirSync, mkdtempSync, mkdirSync, rmSync, statSync } from "fs"
-import { sep, join } from "path"
+import { sep, join, relative } from "path"
 import { tmpdir } from "os"
 import archiveCommands from "./archiveCommands"
 
-const TEST_FILES = "testfiles"
+const TEST_FILES = "testfiles",
+	TRIALS_N = 5
 
 const tempDir = mkdtempSync(tmpdir() + sep)
 
@@ -82,53 +83,58 @@ function runExtractionTest(
 	}
 }
 
-const compressionRecords: Record<string, CompressionResult[]> = {},
-	extractionRecords: Record<string, ExtractionResult[]> = {}
-
-for (const test of readdirSync(TEST_FILES)) {
-	compressionRecords[test] = []
-	extractionRecords[test] = []
-	for (const archiver in archiveCommands) {
-		console.log(`Running compression test ${test}.${archiver}...`)
-		const cstats = runCompressionTest(
-			archiver,
-			test,
-			archiveCommands[archiver].add,
-			join(process.cwd(), TEST_FILES, test)
-		)
-		compressionRecords[test].push(cstats)
-		console.log(`Running extraction test ${test}.${archiver}...`)
-		const xstats = runExtractionTest(
-			archiver,
-			test,
-			archiveCommands[archiver].extract
-		)
-		extractionRecords[test].push(xstats)
+const compressionRecords: Record<string, Record<string, CompressionResult>> = {}
+const extractionRecords: Record<string, Record<string, ExtractionResult>> = {}
+for (let i = 0; i < TRIALS_N; i++) {
+	console.log(`Trial ${i + 1}/${TRIALS_N}`)
+	for (const test of readdirSync(TEST_FILES)) {
+		compressionRecords[test] ??= {}
+		extractionRecords[test] ??= {}
+		for (const archiver in archiveCommands) {
+			console.log(`Running compression test ${test}.${archiver}...`)
+			const cstats = runCompressionTest(
+				archiver,
+				test,
+				archiveCommands[archiver].add,
+				relative(process.cwd(), join(TEST_FILES, test))
+			)
+			if (compressionRecords[test][archiver]) {
+				compressionRecords[test][archiver].compressionRate +=
+					cstats.compressionRate
+				compressionRecords[test][archiver].timeSpent += cstats.timeSpent
+			} else compressionRecords[test][archiver] = cstats
+			console.log(`Running extraction test ${test}.${archiver}...`)
+			const xstats = runExtractionTest(
+				archiver,
+				test,
+				archiveCommands[archiver].extract
+			)
+			extractionRecords[test][archiver] = xstats
+		}
 	}
 }
-
 for (const test in compressionRecords) {
 	console.log(
 		`Speediest ${test} compression: ${
-			compressionRecords[test].reduce(
+			Object.values(compressionRecords[test]).reduce(
 				(acc, val) => (acc.timeSpent > val.timeSpent ? val : acc),
-				compressionRecords[test][0]
+				compressionRecords[test].zip
 			).archiver
 		}`
 	)
 	console.log(
 		`Best quality ${test} compression: ${
-			compressionRecords[test].reduce(
+			Object.values(compressionRecords[test]).reduce(
 				(acc, val) => (acc.compressionRate > val.compressionRate ? acc : val),
-				compressionRecords[test][0]
+				compressionRecords[test].zip
 			).archiver
 		}`
 	)
 	console.log(
 		`Speediest ${test} extraction: ${
-			extractionRecords[test].reduce(
+			Object.values(extractionRecords[test]).reduce(
 				(acc, val) => (acc.timeSpent > val.timeSpent ? val : acc),
-				compressionRecords[test][0]
+				extractionRecords[test].zip
 			).archiver
 		}`
 	)

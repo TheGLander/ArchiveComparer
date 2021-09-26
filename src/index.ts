@@ -13,7 +13,7 @@ import archiveCommands from "./archiveCommands"
 
 const TEST_FILES = "testfiles",
 	RESULT_FILES = "testresults",
-	TRIALS_N = 1
+	TRIALS_N = 10
 
 const tempDir = mkdtempSync(tmpdir() + sep)
 

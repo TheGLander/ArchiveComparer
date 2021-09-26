@@ -1,7 +1,5 @@
 interface ArchiveCompetitor {
 	add: string
-	addHigh?: string
-	addLow?: string
 	extract: string
 }
 

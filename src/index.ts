@@ -1,11 +1,19 @@
 import { execSync } from "child_process"
-import { readdirSync, mkdtempSync, mkdirSync, rmSync, statSync } from "fs"
+import {
+	readdirSync,
+	mkdtempSync,
+	mkdirSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "fs"
 import { sep, join, relative } from "path"
 import { tmpdir } from "os"
 import archiveCommands from "./archiveCommands"
 
 const TEST_FILES = "testfiles",
-	TRIALS_N = 5
+	RESULT_FILES = "testresults",
+	TRIALS_N = 1
 
 const tempDir = mkdtempSync(tmpdir() + sep)
 
@@ -137,6 +145,16 @@ for (const test in compressionRecords) {
 				extractionRecords[test].zip
 			).archiver
 		}`
+	)
+	writeFileSync(
+		relative(process.cwd(), join(RESULT_FILES, test + ".csv")),
+		Object.values(compressionRecords[test]).reduce(
+			(acc, val) =>
+				`${acc}${val.archiver},${val.test},${val.compressionRate},${
+					val.timeSpent
+				},${extractionRecords[test][val.archiver].timeSpent}\n`,
+			""
+		)
 	)
 }
 

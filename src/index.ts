@@ -150,9 +150,9 @@ for (const test in compressionRecords) {
 		relative(process.cwd(), join(RESULT_FILES, test + ".csv")),
 		Object.values(compressionRecords[test]).reduce(
 			(acc, val) =>
-				`${acc}${val.archiver},${val.test},${val.compressionRate},${
-					val.timeSpent
-				},${extractionRecords[test][val.archiver].timeSpent}\n`,
+				`${acc}${val.archiver},${val.test},${val.compressionRate / TRIALS_N},${
+					val.timeSpent / TRIALS_N
+				},${extractionRecords[test][val.archiver].timeSpent / TRIALS_N}\n`,
 			""
 		)
 	)
